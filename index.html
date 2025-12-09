@@ -1,923 +1,112 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 <head>
-<meta charset="UTF-8">
-<title>義手イラスト切り替えアプリ Version 9 – Based on v8 (Skeleton Overlay)</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>
-  body {
-    margin: 0;
-    padding: 0;
-    background: #111;
-    color: #fff;
-    font-family: Arial, sans-serif;
-  }
-  header {
-    padding: 10px 16px;
-    background: #222;
-    font-size: 18px;
-    font-weight: bold;
-    text-align: center;
-  }
-  .container {
-    display: flex;
-    flex-direction: column;
-    padding: 10px;
-    gap: 10px;
-  }
-  @media (min-width: 800px) {
-    .container {
-      flex-direction: row;
+  <meta charset="UTF-8" />
+  <title>義手モデルビューア（Hand.glb）</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
     }
-  }
-  .panel {
-    flex: 1;
-    border: 1px solid #333;
-    border-radius: 8px;
-    padding: 10px;
-  }
-  .panel h2 {
-    font-size: 16px;
-    margin-top: 0;
-    text-align: center;
-  }
-
-  /* カメラ＋ダミー画像＋オーバーレイ */
-  #videoWrapper {
-    position: relative;
-    width: 100%;
-    max-width: 640px;
-  }
-  #previewPen,
-  #video {
-    width: 100%;
-    border-radius: 8px;
-    display: block;
-  }
-  #video {
-    background: #000;
-    display: none;  /* 最初は隠す：ダミーのペンだけ表示 */
-  }
-
-  /* 手のスケルトンを重ねる SVG */
-  #overlaySvg {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-  }
-  .overlay-hand {
-    display: none;
-    stroke: #fff;
-    fill: none;
-    stroke-width: 3;
-  }
-  .overlay-hand.active {
-    display: block;
-  }
-  #overlayHud {
-    fill: #fff;
-    font-size: 12px;
-  }
-
-  #status {
-    font-size: 13px;
-    margin-top: 6px;
-    text-align: center;
-    color: #ccc;
-  }
-  #result {
-    font-size: 16px;
-    margin-top: 6px;
-    text-align: center;
-    color: #0f0;
-  }
-  #hint {
-    font-size: 16px;
-    font-family: monospace;
-    text-align: center;
-    color: #0cf;
-    margin-bottom: 4px;
-    padding: 4px 8px;
-    background: rgba(0,0,0,0.6);
-    border-radius: 6px;
-    display: inline-block;
-    min-width: 200px;
-  }
-  #hint-wrapper {
-    text-align: center;
-    margin-bottom: 4px;
-  }
-  #controls {
-    margin-top: 8px;
-    text-align: center;
-  }
-  button {
-    border: none;
-    font-weight: bold;
-    cursor: pointer;
-  }
-  #camBtn {
-    margin: 4px;
-    padding: 8px 14px;
-    border-radius: 20px;
-    font-size: 14px;
-    background: #0a7;
-    color: #fff;
-  }
-  .sim-btn {
-    width: 56px;
-    height: 56px;
-    margin: 4px;
-    border-radius: 10px;
-    font-size: 11px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
-  #simNone   { background: #444; color: #fff; }
-  #simPen    { background: #0f0; color: #000; }
-  #simPhone  { background: #0af; color: #000; }
-  #simKey    { background: #fa0; color: #000; }
-  #simSalute { background: #f0f; color: #000; }
-
-  #freezeBtn, #lockBtn {
-    margin: 4px;
-    padding: 6px 10px;
-    border-radius: 16px;
-    font-size: 12px;
-    background: #555;
-    color: #fff;
-  }
-
-  #handState {
-    text-align: center;
-    margin-bottom: 6px;
-    font-size: 16px;
-  }
-  .hand-svg {
-    display: none;
-    margin: 0 auto;
-  }
-  .hand-svg.active {
-    display: block;
-  }
-</style>
+    #viewer {
+      width: 100vw;
+      height: 100vh;
+      touch-action: none;
+    }
+    #status {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      padding: 6px 10px;
+      background: rgba(0,0,0,0.6);
+      color: #fff;
+      font-size: 14px;
+      border-radius: 6px;
+      z-index: 10;
+    }
+  </style>
 </head>
 <body>
-<header>義手イラスト切り替えアプリ Version 9 改良（Based on Version 8, Skeleton Overlay）</header>
+  <div id="status">Loading Hand.glb ...</div>
+  <div id="viewer"></div>
 
-<div class="container">
-  <!-- 左：カメラ＆認識 -->
-  <div class="panel">
-    <h2>Camera & Object Recognition</h2>
-    <p style="font-size:13px; text-align:center;">
-      <b>PEN</b>: pixels ≈ 14,000–20,000 &amp; ratio ≈ 1.0–1.8 for ~1.0 s<br>
-      <b>PHONE</b>: pixels ≈ 4,000–11,000 &amp; ratio ≈ 1.0–1.8 for ~0.6 s<br>
-      <b>KEY</b>: pixels ≈ 6,000–9,000 &amp; ratio ≈ 1.9–2.9 for ~0.7 s
-    </p>
-    <div id="hint-wrapper">
-      <span id="hint">pixels: ----, ratio: ---, pen:0.00s, ph:0.00s, key:0.00s</span>
-    </div>
+  <!-- Three.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/loaders/GLTFLoader.js"></script>
 
-    <!-- ダミーペン画像＋ビデオ＋スケルトン SVG オーバーレイ -->
-    <div id="videoWrapper">
-      <img id="previewPen" src="dummy_pen.jpg" alt="Dummy pen image">
-      <video id="video" autoplay playsinline></video>
+  <script>
+    const container = document.getElementById('viewer');
+    const status = document.getElementById('status');
 
-      <!-- ここが、右パネルとほぼ同じスケルトンを重ねる SVG -->
-      <svg id="overlaySvg" viewBox="0 0 220 220" preserveAspectRatio="xMidYMid meet">
-        <!-- RELAXED -->
-        <g id="overlayRelaxed" class="overlay-hand active">
-          <rect x="80" y="90" width="60" height="70" rx="20" ry="20"/>
-          <line x1="110" y1="160" x2="110" y2="190"/>
-          <circle cx="110" cy="160" r="4"/>
-          <!-- fingers -->
-          <line x1="88" y1="115" x2="70" y2="125"/>
-          <circle cx="88" cy="115" r="4"/>
-          <circle cx="70" cy="125" r="4"/>
-          <line x1="96" y1="90" x2="96" y2="65"/>
-          <circle cx="96" cy="90" r="4"/>
-          <circle cx="96" cy="65" r="4"/>
-          <line x1="110" y1="88" x2="110" y2="60"/>
-          <circle cx="110" cy="88" r="4"/>
-          <circle cx="110" cy="60" r="4"/>
-          <line x1="124" y1="90" x2="124" y2="66"/>
-          <circle cx="124" cy="90" r="4"/>
-          <circle cx="124" cy="66" r="4"/>
-          <line x1="136" y1="96" x2="140" y2="75"/>
-          <circle cx="136" cy="96" r="4"/>
-          <circle cx="140" cy="75" r="4"/>
-        </g>
+    // Scene
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000000);
 
-        <!-- PEN HOLD -->
-        <g id="overlayPen" class="overlay-hand">
-          <rect x="80" y="95" width="60" height="65" rx="20" ry="20"/>
-          <line x1="110" y1="160" x2="110" y2="190"/>
-          <circle cx="110" cy="160" r="4"/>
-          <!-- fingers -->
-          <line x1="100" y1="100" x2="102" y2="70"/>
-          <circle cx="100" cy="100" r="4"/>
-          <circle cx="102" cy="70" r="4"/>
-          <line x1="116" y1="100" x2="114" y2="70"/>
-          <circle cx="116" cy="100" r="4"/>
-          <circle cx="114" cy="70" r="4"/>
-          <line x1="90" y1="120" x2="98" y2="88"/>
-          <circle cx="90" cy="120" r="4"/>
-          <circle cx="98" cy="88" r="4"/>
-          <line x1="126" y1="110" x2="132" y2="90"/>
-          <circle cx="126" cy="110" r="4"/>
-          <circle cx="132" cy="90" r="4"/>
-          <line x1="136" y1="120" x2="142" y2="102"/>
-          <circle cx="136" cy="120" r="4"/>
-          <circle cx="142" cy="102" r="4"/>
-          <!-- pen -->
-          <line x1="100" y1="80" x2="116" y2="118"/>
-        </g>
+    // Camera
+    const camera = new THREE.PerspectiveCamera(
+      45,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      100
+    );
+    camera.position.set(0, 1.2, 3);
 
-        <!-- PHONE SUPPORT -->
-        <g id="overlayPhone" class="overlay-hand">
-          <!-- phone -->
-          <rect x="92" y="60" width="50" height="90" rx="8" ry="8"/>
-          <!-- palm -->
-          <rect x="80" y="95" width="60" height="65" rx="20" ry="20"/>
-          <line x1="110" y1="160" x2="110" y2="190"/>
-          <circle cx="110" cy="160" r="4"/>
-          <!-- fingers -->
-          <line x1="90" y1="130" x2="90" y2="110"/>
-          <circle cx="90" cy="130" r="4"/>
-          <circle cx="90" cy="110" r="4"/>
-          <line x1="142" y1="80" x2="148" y2="70"/>
-          <circle cx="142" cy="80" r="4"/>
-          <circle cx="148" cy="70" r="4"/>
-          <line x1="144" y1="94" x2="150" y2="84"/>
-          <circle cx="144" cy="94" r="4"/>
-          <circle cx="150" cy="84" r="4"/>
-          <line x1="146" y1="108" x2="152" y2="98"/>
-          <circle cx="146" cy="108" r="4"/>
-          <circle cx="152" cy="98" r="4"/>
-          <line x1="144" y1="122" x2="150" y2="112"/>
-          <circle cx="144" cy="122" r="4"/>
-          <circle cx="150" cy="112" r="4"/>
-        </g>
+    // Renderer
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    container.appendChild(renderer.domElement);
 
-        <!-- KEY SIDE PINCH -->
-        <g id="overlayKey" class="overlay-hand">
-          <!-- palm -->
-          <rect x="80" y="95" width="60" height="65" rx="20" ry="20"/>
-          <line x1="110" y1="160" x2="110" y2="190"/>
-          <circle cx="110" cy="160" r="4"/>
-          <!-- side pinch fingers -->
-          <line x1="108" y1="100" x2="132" y2="102"/>
-          <circle cx="108" cy="100" r="4"/>
-          <circle cx="132" cy="102" r="4"/>
-          <line x1="110" y1="108" x2="135" y2="112"/>
-          <circle cx="110" cy="108" r="4"/>
-          <circle cx="135" cy="112" r="4"/>
-          <line x1="112" y1="118" x2="132" y2="122"/>
-          <circle cx="112" cy="118" r="4"/>
-          <circle cx="132" cy="122" r="4"/>
-          <!-- thumb block + key -->
-          <rect x="60" y="105" width="20" height="18" rx="9" ry="9"/>
-          <rect x="80" y="112" width="26" height="4"/>
-        </g>
+    // Light
+    const light1 = new THREE.DirectionalLight(0xffffff, 1.0);
+    light1.position.set(2, 2, 2);
+    scene.add(light1);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 
-        <!-- SALUTE / CHOP（敬礼：自動認識では使わない・ボタン専用） -->
-        <g id="overlaySalute" class="overlay-hand">
-          <line x1="110" y1="150" x2="110" y2="190"/>
-          <circle cx="110" cy="150" r="4"/>
-          <rect x="90" y="80" width="50" height="70" rx="12" ry="12"/>
-          <line x1="96" y1="80"  x2="96"  y2="40"/>
-          <line x1="106" y1="80" x2="106" y2="40"/>
-          <line x1="116" y1="80" x2="116" y2="40"/>
-          <line x1="126" y1="80" x2="126" y2="40"/>
-          <line x1="90" y1="95" x2="80" y2="125"/>
-          <circle cx="80" cy="125" r="4"/>
-        </g>
+    // Controls
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
 
-        <!-- 下部にパラメータ表示 -->
-        <text id="overlayHud" x="110" y="210" text-anchor="middle">
-          pixels: ----  ratio: --.-  pen:0.00s ph:0.00s key:0.00s
-        </text>
-      </svg>
-    </div>
+    // Load model
+    const loader = new THREE.GLTFLoader();
+    loader.load(
+      "./Hand.glb", // ← あなたのファイル名に合わせて変更
+      function (gltf) {
+        const model = gltf.scene;
+        model.scale.set(1, 1, 1);
+        scene.add(model);
 
-    <div id="result">State: RELAXED (no object detected)</div>
-    <div id="controls">
-      <button id="camBtn" type="button">Start / Retry Camera</button><br>
-      <button id="simNone"   class="sim-btn" type="button">S:None</button>
-      <button id="simPen"    class="sim-btn" type="button">S:Pen</button>
-      <button id="simPhone"  class="sim-btn" type="button">S:Ph</button>
-      <button id="simKey"    class="sim-btn" type="button">S:Key</button>
-      <button id="simSalute" class="sim-btn" type="button">S:Sal</button>
-      <br>
-      <button id="freezeBtn" type="button">Freeze</button>
-      <button id="lockBtn"   type="button">Lock</button>
-    </div>
-    <div id="status">
-      Auto recognition: PEN / PHONE / KEY on dark background.  
-      Freeze = pause, Lock = finger-only subtle motion.
-    </div>
-  </div>
-
-  <!-- 右：手のポーズ（あなたの v8 SVG をそのまま使用） -->
-  <div class="panel">
-    <h2>Hand Pose – Skeleton View</h2>
-    <div id="handState">Current pose: RELAXED</div>
-
-    <!-- Relaxed hand -->
-    <svg id="handRelaxed" class="hand-svg active" width="220" height="220" viewBox="0 0 220 220">
-      <g id="relaxedPalm">
-        <rect x="80" y="90" width="60" height="70" rx="20" ry="20"
-              fill="none" stroke="#666" stroke-width="3"/>
-        <line x1="110" y1="160" x2="110" y2="190" stroke="#666" stroke-width="4"/>
-        <circle cx="110" cy="160" r="4" fill="#ccc"/>
-        <text x="110" y="205" text-anchor="middle" fill="#ccc" font-size="14">
-          Relaxed half-fist (skeleton)
-        </text>
-      </g>
-      <g id="relaxedFingers">
-        <line x1="88" y1="115" x2="70" y2="125" stroke="#ccc" stroke-width="3"/>
-        <circle cx="88" cy="115" r="4" fill="#ccc"/>
-        <circle cx="70" cy="125" r="4" fill="#ccc"/>
-        <line x1="96" y1="90" x2="96" y2="65" stroke="#ccc" stroke-width="3"/>
-        <circle cx="96" cy="90" r="4" fill="#ccc"/>
-        <circle cx="96" cy="65" r="4" fill="#ccc"/>
-        <line x1="110" y1="88" x2="110" y2="60" stroke="#ccc" stroke-width="3"/>
-        <circle cx="110" cy="88" r="4" fill="#ccc"/>
-        <circle cx="110" cy="60" r="4" fill="#ccc"/>
-        <line x1="124" y1="90" x2="124" y2="66" stroke="#ccc" stroke-width="3"/>
-        <circle cx="124" cy="90" r="4" fill="#ccc"/>
-        <circle cx="124" cy="66" r="4" fill="#ccc"/>
-        <line x1="136" y1="96" x2="140" y2="75" stroke="#ccc" stroke-width="3"/>
-        <circle cx="136" cy="96" r="4" fill="#ccc"/>
-        <circle cx="140" cy="75" r="4" fill="#ccc"/>
-      </g>
-    </svg>
-
-    <!-- Pen hold hand -->
-    <svg id="handPen" class="hand-svg" width="220" height="220" viewBox="0 0 220 220">
-      <g id="penPalm">
-        <rect x="80" y="95" width="60" height="65" rx="20" ry="20"
-              fill="none" stroke="#666" stroke-width="3"/>
-        <line x1="110" y1="160" x2="110" y2="190" stroke="#666" stroke-width="4"/>
-        <circle cx="110" cy="160" r="4" fill="#ccc"/>
-        <text x="110" y="205" text-anchor="middle" fill="#ccc" font-size="14">
-          Pen grip – 3-finger cone (skeleton)
-        </text>
-      </g>
-      <g id="penFingers">
-        <line x1="100" y1="100" x2="102" y2="70" stroke="#ccc" stroke-width="3"/>
-        <circle cx="100" cy="100" r="4" fill="#ccc"/>
-        <circle cx="102" cy="70" r="4" fill="#ccc"/>
-        <line x1="116" y1="100" x2="114" y2="70" stroke="#ccc" stroke-width="3"/>
-        <circle cx="116" cy="100" r="4" fill="#ccc"/>
-        <circle cx="114" cy="70" r="4" fill="#ccc"/>
-        <line x1="90" y1="120" x2="98" y2="88" stroke="#ccc" stroke-width="3"/>
-        <circle cx="90" cy="120" r="4" fill="#ccc"/>
-        <circle cx="98" cy="88" r="4" fill="#ccc"/>
-        <line x1="126" y1="110" x2="132" y2="90" stroke="#555" stroke-width="3"/>
-        <circle cx="126" cy="110" r="4" fill="#555"/>
-        <circle cx="132" cy="90" r="4" fill="#555"/>
-        <line x1="136" y1="120" x2="142" y2="102" stroke="#555" stroke-width="3"/>
-        <circle cx="136" cy="120" r="4" fill="#555"/>
-        <circle cx="142" cy="102" r="4" fill="#555"/>
-        <line x1="100" y1="80" x2="116" y2="118" stroke="#0cf" stroke-width="4"/>
-      </g>
-    </svg>
-
-    <!-- Phone support hand -->
-    <svg id="handPhone" class="hand-svg" width="220" height="220" viewBox="0 0 220 220">
-      <g id="phonePalm">
-        <rect x="92" y="60" width="50" height="90" rx="8" ry="8"
-              fill="none" stroke="#0af" stroke-width="3"/>
-        <rect x="80" y="95" width="60" height="65" rx="20" ry="20"
-              fill="none" stroke="#666" stroke-width="3"/>
-        <line x1="110" y1="160" x2="110" y2="190" stroke="#666" stroke-width="4"/>
-        <circle cx="110" cy="160" r="4" fill="#ccc"/>
-        <text x="110" y="205" text-anchor="middle" fill="#ccc" font-size="14">
-          Phone support (skeleton)
-        </text>
-      </g>
-      <g id="phoneFingers">
-        <line x1="90" y1="130" x2="90" y2="110" stroke="#ccc" stroke-width="3"/>
-        <circle cx="90" cy="130" r="4" fill="#ccc"/>
-        <circle cx="90" cy="110" r="4" fill="#ccc"/>
-        <line x1="142" y1="80" x2="148" y2="70" stroke="#ccc" stroke-width="3"/>
-        <circle cx="142" cy="80" r="4" fill="#ccc"/>
-        <circle cx="148" cy="70" r="4" fill="#ccc"/>
-        <line x1="144" y1="94" x2="150" y2="84" stroke="#ccc" stroke-width="3"/>
-        <circle cx="144" cy="94" r="4" fill="#ccc"/>
-        <circle cx="150" cy="84" r="4" fill="#ccc"/>
-        <line x1="146" y1="108" x2="152" y2="98" stroke="#ccc" stroke-width="3"/>
-        <circle cx="146" cy="108" r="4" fill="#ccc"/>
-        <circle cx="152" cy="98" r="4" fill="#ccc"/>
-        <line x1="144" y1="122" x2="150" y2="112" stroke="#ccc" stroke-width="3"/>
-        <circle cx="144" cy="122" r="4" fill="#ccc"/>
-        <circle cx="150" cy="112" r="4" fill="#ccc"/>
-      </g>
-    </svg>
-
-    <!-- Key side pinch hand -->
-    <svg id="handKey" class="hand-svg" width="220" height="220" viewBox="0 0 220 220">
-      <g id="keyPalm">
-        <rect x="80" y="95" width="60" height="65" rx="20" ry="20"
-              fill="none" stroke="#666" stroke-width="3"/>
-        <line x1="110" y1="160" x2="110" y2="190" stroke="#666" stroke-width="4"/>
-        <circle cx="110" cy="160" r="4" fill="#ccc"/>
-        <text x="110" y="205" text-anchor="middle" fill="#ccc" font-size="14">
-          Key / card side pinch (skeleton)
-        </text>
-      </g>
-      <g id="keyFingers">
-        <line x1="108" y1="100" x2="132" y2="102" stroke="#ccc" stroke-width="3"/>
-        <circle cx="108" cy="100" r="4" fill="#ccc"/>
-        <circle cx="132" cy="102" r="4" fill="#ccc"/>
-        <line x1="110" y1="108" x2="135" y2="112" stroke="#555" stroke-width="3"/>
-        <circle cx="110" cy="108" r="4" fill="#555"/>
-        <circle cx="135" cy="112" r="4" fill="#555"/>
-        <line x1="112" y1="118" x2="132" y2="122" stroke="#555" stroke-width="3"/>
-        <circle cx="112" cy="118" r="4" fill="#555"/>
-        <circle cx="132" cy="122" r="4" fill="#555"/>
-        <rect id="keyThumbBlock" x="60" y="105" width="20" height="18" rx="9" ry="9" fill="#ccc"/>
-        <rect id="keyObject" x="80" y="112" width="26" height="4" fill="#0cf"/>
-      </g>
-    </svg>
-
-    <!-- Salute / chop hand（敬礼：この形で固定） -->
-    <svg id="handSalute" class="hand-svg" width="220" height="220" viewBox="0 0 220 220">
-      <g id="salutePalm">
-        <line x1="110" y1="150" x2="110" y2="190" stroke="#666" stroke-width="4"/>
-        <circle cx="110" cy="150" r="4" fill="#ccc"/>
-        <rect x="90" y="80" width="50" height="70" rx="12" ry="12"
-              fill="none" stroke="#666" stroke-width="3"/>
-        <text x="110" y="205" text-anchor="middle" fill="#ccc" font-size="14">
-          Salute – fingers straight & parallel
-        </text>
-      </g>
-      <g id="saluteFingers">
-        <line x1="96" y1="80"  x2="96"  y2="40" stroke="#ccc" stroke-width="4"/>
-        <line x1="106" y1="80" x2="106" y2="40" stroke="#ccc" stroke-width="4"/>
-        <line x1="116" y1="80" x2="116" y2="40" stroke="#ccc" stroke-width="4"/>
-        <line x1="126" y1="80" x2="126" y2="40" stroke="#ccc" stroke-width="4"/>
-        <line x1="90" y1="95" x2="80" y2="125" stroke="#ccc" stroke-width="3"/>
-        <circle cx="80" cy="125" r="4" fill="#ccc"/>
-      </g>
-    </svg>
-  </div>
-</div>
-
-<script>
-(function(){
-  const BRIGHTNESS_THRESHOLD = 500; // v8 と同じ
-
-  const video = document.getElementById('video');
-  const previewPen = document.getElementById('previewPen');
-  const resultEl = document.getElementById('result');
-  const statusEl = document.getElementById('status');
-  const hintEl = document.getElementById('hint');
-  const camBtn = document.getElementById('camBtn');
-
-  const simNoneBtn   = document.getElementById('simNone');
-  const simPenBtn    = document.getElementById('simPen');
-  const simPhoneBtn  = document.getElementById('simPhone');
-  const simKeyBtn    = document.getElementById('simKey');
-  const simSaluteBtn = document.getElementById('simSalute');
-
-  const freezeBtn = document.getElementById('freezeBtn');
-  const lockBtn   = document.getElementById('lockBtn');
-
-  const handStateEl = document.getElementById('handState');
-  const handRelaxed = document.getElementById('handRelaxed');
-  const handPen     = document.getElementById('handPen');
-  const handPhone   = document.getElementById('handPhone');
-  const handKey     = document.getElementById('handKey');
-  const handSalute  = document.getElementById('handSalute');
-
-  const relaxedFingers = document.getElementById('relaxedFingers');
-  const penFingers     = document.getElementById('penFingers');
-  const phoneFingers   = document.getElementById('phoneFingers');
-  const keyFingers     = document.getElementById('keyFingers');
-
-  const keyThumbBlock = document.getElementById('keyThumbBlock');
-  const keyObject     = document.getElementById('keyObject');
-
-  // オーバーレイ SVG
-  const overlayRelaxed = document.getElementById('overlayRelaxed');
-  const overlayPen     = document.getElementById('overlayPen');
-  const overlayPhone   = document.getElementById('overlayPhone');
-  const overlayKey     = document.getElementById('overlayKey');
-  const overlaySalute  = document.getElementById('overlaySalute');
-  const overlayHud     = document.getElementById('overlayHud');
-
-  let stream = null;
-  let analyzing = false;
-  let logicalState = 'none';
-
-  let penConditionStart   = null;
-  let phoneConditionStart = null;
-  let keyConditionStart   = null;
-
-  const REQUIRED_PEN_MS   = 1000;
-  const REQUIRED_PHONE_MS = 600;
-  const REQUIRED_KEY_MS   = 700;
-
-  let freezeUntil = 0;
-
-  let freezeActive = false;
-  let lockActive   = false;
-  let lockAnimInterval = null;
-  let lockPhase = 0;
-
-  function allHands() {
-    return [handRelaxed, handPen, handPhone, handKey, handSalute];
-  }
-  function allOverlayHands() {
-    return [overlayRelaxed, overlayPen, overlayPhone, overlayKey, overlaySalute];
-  }
-
-  function resetFingerTransforms() {
-    if (relaxedFingers) relaxedFingers.setAttribute('transform','');
-    if (penFingers)     penFingers.setAttribute('transform','');
-    if (phoneFingers)   phoneFingers.setAttribute('transform','');
-    if (keyFingers)     keyFingers.setAttribute('transform','');
-  }
-
-  function activateSvg(target) {
-    allHands().forEach(el => el.classList.remove('active'));
-    target.classList.add('active');
-  }
-  function activateOverlay(target) {
-    allOverlayHands().forEach(el => el.classList.remove('active'));
-    if (target) target.classList.add('active');
-  }
-
-  function showRelaxed() {
-    logicalState = 'none';
-    activateSvg(handRelaxed);
-    activateOverlay(overlayRelaxed);
-    handStateEl.textContent = 'Current pose: RELAXED';
-    resultEl.textContent    = 'State: RELAXED (no object detected)';
-    if (keyObject) keyObject.removeAttribute('transform');
-  }
-
-  function showPen() {
-    logicalState = 'pen';
-    activateSvg(handPen);
-    activateOverlay(overlayPen);
-    handStateEl.textContent = 'Current pose: PEN HOLD';
-    resultEl.textContent    = 'State: PEN detected → Pen grip';
-  }
-
-  function showPhone() {
-    logicalState = 'phone';
-    activateSvg(handPhone);
-    activateOverlay(overlayPhone);
-    handStateEl.textContent = 'Current pose: CELL PHONE SUPPORT';
-    resultEl.textContent    = 'State: PHONE detected → Phone support';
-  }
-
-  function showKey() {
-    logicalState = 'key';
-    activateSvg(handKey);
-    activateOverlay(overlayKey);
-    handStateEl.textContent = 'Current pose: KEY SIDE PINCH';
-    resultEl.textContent    = 'State: KEY detected → Side pinch';
-  }
-
-  function showSalute() {
-    logicalState = 'salute';
-    activateSvg(handSalute);
-    activateOverlay(overlaySalute);
-    handStateEl.textContent = 'Current pose: SALUTE / CHOP';
-    resultEl.textContent    = 'State: Salute (simulation only)';
-  }
-
-  // Key animation（右パネルの親指・鍵だけ動かす）
-  function setKeyThumbFrame(frame) {
-    const right = 80;
-    const baseW = 20;
-    const baseH = 18;
-    const centerY = 114;
-    let h;
-    if (frame === 1) h = baseH;
-    else if (frame === 2) h = baseH * 1.2;
-    else h = baseH * 1.2 * 1.2;
-    const w = baseW;
-    const x = right - w;
-    const y = centerY - h / 2;
-    keyThumbBlock.setAttribute('x', String(x));
-    keyThumbBlock.setAttribute('y', String(y));
-    keyThumbBlock.setAttribute('width', String(w));
-    keyThumbBlock.setAttribute('height', String(h));
-  }
-
-  function startKeyAnimation() {
-    const now = performance.now();
-    showKey();
-    if (keyObject) keyObject.removeAttribute('transform');
-    freezeUntil = now + 300 + 2000;
-    setKeyThumbFrame(1);
-    setTimeout(()=>{ if (logicalState==='key') setKeyThumbFrame(2); },100);
-    setTimeout(()=>{ if (logicalState==='key') setKeyThumbFrame(3); },200);
-    setTimeout(()=>{
-      if (logicalState==='key' && keyObject){
-        keyObject.setAttribute('transform','rotate(-90 93 114)');
+        status.textContent = "Model Loaded!";
+      },
+      function (xhr) {
+        if (xhr.total) {
+          status.textContent = "Loading... " + ((xhr.loaded / xhr.total) * 100).toFixed(0) + "%";
+        }
+      },
+      function (err) {
+        status.textContent = "Failed to load model.";
+        console.error(err);
       }
-    },200);
-  }
+    );
 
-  function applyLockPoseMotion() {
-    resetFingerTransforms();
-    if (!lockActive) return;
-    const phase = lockPhase % 2;
-    switch (logicalState) {
-      case 'none':
-        if (relaxedFingers){
-          relaxedFingers.setAttribute('transform', phase===0 ? 'translate(1,0)' : 'translate(0,0)');
-        }
-        break;
-      case 'pen':
-        if (penFingers){
-          penFingers.setAttribute('transform', phase===0 ? 'rotate(-3 110 100)' : 'rotate(0 110 100)');
-        }
-        break;
-      case 'phone':
-        if (phoneFingers){
-          phoneFingers.setAttribute('transform', phase===0 ? 'translate(0,-2)' : 'translate(0,0)');
-        }
-        break;
-      case 'key':
-        if (keyFingers){
-          keyFingers.setAttribute('transform', phase===0 ? 'translate(1,0)' : 'translate(0,0)');
-        }
-        break;
-      case 'salute':
-        break;
+    // Animation loop
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
     }
-  }
+    animate();
 
-  function startLockAnimation() {
-    if (lockAnimInterval) return;
-    lockPhase = 0;
-    lockAnimInterval = setInterval(()=>{
-      lockPhase = (lockPhase + 1) % 2;
-      applyLockPoseMotion();
-    },600);
-  }
-
-  function stopLockAnimation() {
-    if (lockAnimInterval){
-      clearInterval(lockAnimInterval);
-      lockAnimInterval = null;
-    }
-    resetFingerTransforms();
-  }
-
-  function updateOverlayHudText(count, ratio, penMs, phoneMs, keyMs) {
-    if (!overlayHud) return;
-    if (freezeActive) return; // Freeze 中は表示も止める
-    overlayHud.textContent =
-      `pixels: ${count}  ratio: ${ratio.toFixed(2)}  ` +
-      `pen:${(penMs/1000).toFixed(2)}s ph:${(phoneMs/1000).toFixed(2)}s key:${(keyMs/1000).toFixed(2)}s`;
-  }
-
-  // シミュレーションボタン
-  simNoneBtn.addEventListener('click', e=>{
-    e.preventDefault();
-    penConditionStart = phoneConditionStart = keyConditionStart = null;
-    freezeUntil = 0;
-    showRelaxed();
-    applyLockPoseMotion();
-    updateOverlayHudText(0, 0, 0, 0, 0);
-  });
-  simPenBtn.addEventListener('click', e=>{
-    e.preventDefault();
-    penConditionStart = phoneConditionStart = keyConditionStart = null;
-    freezeUntil = performance.now() + 500;
-    showPen();
-    applyLockPoseMotion();
-  });
-  simPhoneBtn.addEventListener('click', e=>{
-    e.preventDefault();
-    penConditionStart = phoneConditionStart = keyConditionStart = null;
-    freezeUntil = performance.now() + 500;
-    showPhone();
-    applyLockPoseMotion();
-  });
-  simKeyBtn.addEventListener('click', e=>{
-    e.preventDefault();
-    penConditionStart = phoneConditionStart = keyConditionStart = null;
-    startKeyAnimation();
-    applyLockPoseMotion();
-  });
-  // 敬礼は手動ボタンからのみ
-  simSaluteBtn.addEventListener('click', e=>{
-    e.preventDefault();
-    penConditionStart = phoneConditionStart = keyConditionStart = null;
-    freezeUntil = performance.now() + 500;
-    showSalute();
-    applyLockPoseMotion();
-  });
-
-  // Freeze
-  freezeBtn.addEventListener('click', e=>{
-    e.preventDefault();
-    if (lockActive){
-      lockActive = false;
-      freezeActive = false;
-      stopLockAnimation();
-      freezeBtn.textContent = 'Freeze';
-      lockBtn.textContent   = 'Lock';
-      statusEl.textContent  = 'Lock released by Freeze. Recognition resumed.';
-      return;
-    }
-    freezeActive = !freezeActive;
-    if (freezeActive){
-      freezeBtn.textContent = 'Freeze ON';
-      statusEl.textContent  = 'Freeze: camera recognition & overlay paused.';
-    } else {
-      freezeBtn.textContent = 'Freeze';
-      statusEl.textContent  = 'Freeze released. Recognition resumed.';
-    }
-  });
-
-  // Lock
-  lockBtn.addEventListener('click', e=>{
-    e.preventDefault();
-    if (freezeActive){
-      statusEl.textContent = 'Unlock Freeze first, then Lock.';
-      return;
-    }
-    lockActive = !lockActive;
-    if (lockActive){
-      lockBtn.textContent  = 'Lock ON';
-      statusEl.textContent = 'Lock: recognition disabled, only subtle finger motion.';
-      startLockAnimation();
-      applyLockPoseMotion();
-    } else {
-      lockBtn.textContent  = 'Lock';
-      statusEl.textContent = 'Lock released. Recognition resumed.';
-      stopLockAnimation();
-    }
-  });
-
-  // カメラ起動
-  async function startCamera() {
-    try {
-      if (stream){
-        stream.getTracks().forEach(t=>t.stop());
-      }
-      statusEl.textContent = 'Requesting camera...';
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" } }
-      });
-      video.srcObject = stream;
-
-      if (previewPen) previewPen.style.display = 'none';
-      video.style.display = 'block';
-
-      statusEl.textContent = 'Camera started. Dark background works best.';
-      if (!analyzing){
-        analyzing = true;
-        requestAnimationFrame(analyzeFrame);
-      }
-    } catch(e){
-      statusEl.textContent = 'Camera not available. Use simulation buttons.';
-    }
-  }
-
-  camBtn.addEventListener('click', e=>{
-    e.preventDefault();
-    startCamera();
-  });
-
-  // 画像認識（v8 と同じ px+ratio ロジック）＋オーバーレイ HUD 更新
-  function analyzeFrame() {
-    const now = performance.now();
-
-    if (!video.videoWidth || !video.videoHeight){
-      requestAnimationFrame(analyzeFrame);
-      return;
-    }
-
-    // freezeUntil は短時間のアニメーション用の「一時停止」
-    if (now < freezeUntil){
-      hintEl.textContent = 'Recognition paused…';
-      requestAnimationFrame(analyzeFrame);
-      return;
-    }
-
-    const canvas = document.createElement('canvas');
-    canvas.width  = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video,0,0,canvas.width,canvas.height);
-    const imageData = ctx.getImageData(0,0,canvas.width,canvas.height);
-    const data = imageData.data;
-
-    let minX = canvas.width, minY = canvas.height;
-    let maxX = 0, maxY = 0;
-    let count = 0;
-
-    for (let i=0;i<data.length;i+=4){
-      const r = data[i];
-      const g = data[i+1];
-      const b = data[i+2];
-      const brightness = r+g+b;
-      if (brightness > BRIGHTNESS_THRESHOLD){
-        const idx = i/4;
-        const x = idx % canvas.width;
-        const y = Math.floor(idx / canvas.width);
-        if (x<minX) minX=x;
-        if (y<minY) minY=y;
-        if (x>maxX) maxX=x;
-        if (y>maxY) maxY=y;
-        count++;
-      }
-    }
-
-    let ratio = 0;
-    if (count>0){
-      const w = maxX-minX;
-      const h = maxY-minY;
-      ratio = Math.max(w,h)/Math.max(1,Math.min(w,h));
-    }
-
-    let penCondition   = false;
-    let phoneCondition = false;
-    let keyCondition   = false;
-
-    if (count>=14000 && count<=20000 && ratio>=1.0 && ratio<=1.8) penCondition = true;
-    if (count>=4000  && count<=11000 && ratio>=1.0 && ratio<=1.8) phoneCondition = true;
-    if (count>=6000  && count<=9000  && ratio>=1.9 && ratio<=2.9) keyCondition = true;
-
-    let penElapsed = 0, phoneElapsed = 0, keyElapsed = 0;
-
-    if (penCondition){
-      if (penConditionStart===null) penConditionStart=now;
-      penElapsed = now-penConditionStart;
-    } else penConditionStart=null;
-
-    if (phoneCondition){
-      if (phoneConditionStart===null) phoneConditionStart=now;
-      phoneElapsed = now-phoneConditionStart;
-    } else phoneConditionStart=null;
-
-    if (keyCondition){
-      if (keyConditionStart===null) keyConditionStart=now;
-      keyElapsed = now-keyConditionStart;
-    } else keyConditionStart=null;
-
-    // Freeze / Lock 中は論理状態を変えない（見かけ上止める）
-    if (!freezeActive && !lockActive){
-      if (phoneCondition && phoneElapsed>=REQUIRED_PHONE_MS){
-        if (logicalState!=='phone'){
-          showPhone();
-          freezeUntil = now+500;
-          applyLockPoseMotion();
-        }
-      } else if (keyCondition && keyElapsed>=REQUIRED_KEY_MS){
-        if (logicalState!=='key'){
-          startKeyAnimation();
-          applyLockPoseMotion();
-        }
-      } else if (penCondition && penElapsed>=REQUIRED_PEN_MS){
-        if (logicalState!=='pen'){
-          showPen();
-          freezeUntil = now+500;
-          applyLockPoseMotion();
-        }
-      } else if (!phoneCondition && !keyCondition && !penCondition){
-        if (logicalState!=='none'){
-          showRelaxed();
-          applyLockPoseMotion();
-        }
-      }
-    }
-
-    hintEl.textContent =
-      'pixels: '+count+
-      ', ratio: '+ratio.toFixed(2)+
-      ', thr: '+BRIGHTNESS_THRESHOLD+
-      ', pen:'+ (penElapsed/1000).toFixed(2)+'s'+
-      ', ph:'+  (phoneElapsed/1000).toFixed(2)+'s'+
-      ', key:'+ (keyElapsed/1000).toFixed(2)+'s';
-
-    updateOverlayHudText(count, ratio, penElapsed, phoneElapsed, keyElapsed);
-
-    requestAnimationFrame(analyzeFrame);
-  }
-
-  statusEl.textContent =
-    'PHONE reacts fastest (0.6 s), KEY rotates after 0.2 s, PEN slower (1.0 s). Dark background recommended.';
-
-  // 初期表示
-  showRelaxed();
-
-})();
-</script>
+    // Resize
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
 </body>
 </html>
